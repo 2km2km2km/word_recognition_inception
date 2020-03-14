@@ -44,4 +44,4 @@ def get_txt_CASIA(path,max_class_num=10,train_jpg_num=300):
            break
     print("done")
 
-#get_txt_CASIA("/media/xzl/Newsmy/数据集/CASIA-HWDB/Character Sample Data/1.0/",10,10)
+get_txt_CASIA("/media/xzl/Newsmy/数据集/CASIA-HWDB/Character Sample Data/1.0/",10,1000)

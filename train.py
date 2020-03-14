@@ -6,7 +6,8 @@ from models import *
 from utils.datasets import *
 from utils.loss import *
 from utils.parse_config import *
-from test import evaluate
+#from test import evaluate
+from test import *
 
 
 #from terminaltables import AsciiTable
@@ -24,9 +25,9 @@ from torchvision import datasets
 from torchvision import transforms
 from torch.autograd import Variable
 import torch.optim as optim
-#from tensorboardX import SummaryWriter
+from tensorboardX import SummaryWriter
 
-
+w=SummaryWriter(comment="inception")
 
 def train(epochs):
     #载入部分超参数
@@ -105,29 +106,6 @@ def train(epochs):
     # 优化器
     optimizer = torch.optim.Adam(model.parameters(), lr=opt.learning_rate)
 
-    # 指标
-    metrics = [
-        "precision",
-        "recall"
-    ]
-    '''
-    metrics = [
-        "grid_size",
-        "loss",
-        "x",
-        "y",
-        "w",
-        "h",
-        "conf",
-        "cls",
-        "cls_acc",
-        "recall50",
-        "recall75",
-        "precision",
-        "conf_obj",
-        "conf_noobj",
-    ]
-    '''
     count_show = 30  # 每训练30步显示一次训练效果
 
     #for epoch in range(opt.epochs):
@@ -135,16 +113,25 @@ def train(epochs):
     for epoch in range(epochs):
         model.train()
         start_time = time.time()
+        batch_time = AverageMeter('Time', ':6.3f')
+        # data_time = AverageMeter('Data', ':6.3f')
+        losses = AverageMeter('Loss', ':.4e')
+        top1 = AverageMeter('Acc@1', ':6.2f')
+        top5 = AverageMeter('Acc@5', ':6.2f')
+        progress = ProgressMeter(len(dataloader), batch_time, losses, top1,top5)
         epoch_loss=0
         for batch_i, (_, imgs, y_reals) in enumerate(dataloader):
             batches_done = len(dataloader) * epoch + batch_i  #已训练的图片batch数
-
             imgs = Variable(imgs.to(device))
             y_reals = Variable(y_reals.to(device), requires_grad=False)
             #print("train y_real",y_reals)
             #y_reals=real2more(y_reals,10)
             y_hats = model(imgs)
             loss=loss_CEL(y_hats,y_reals)
+            acc1, acc5 = accuracy(y_hats, y_reals, topk=(1, 2))
+            losses.update(loss.item(), imgs.size(0))
+            top1.update(acc1[0], imgs.size(0))
+            top5.update(acc5[0], imgs.size(0))
             loss.backward()
 
             if batches_done % opt.gradient_accumulations:
@@ -194,17 +181,22 @@ def train(epochs):
         print("loss",epoch_loss)
         if epoch % opt.evaluation_interval == 0:
             print("\n---- Evaluating Model ----")
-            precision=evaluate(
+            val_losses,val_top1,val_top5=evaluate(
                 model,
                 test_path,
                 opt.img_size,
-                6
+                6,
+                loss_CEL
             )
-            precisions.append(precision)
-            print(precision)
+            #precisions.append(precision)
+            #print(precision)
         if epoch % opt.checkpoint_interval == 0:
             torch.save(model.state_dict(), f"checkpoints/inception_ckpt_%d.pth" % epoch)
+        w.add_scalars("loss",{"train":losses.avg,"val":val_losses.avg},epoch)
+        w.add_scalars("top1",{"train":top1.avg,"val":val_top1.avg},epoch)
+        w.add_scalars("top5",{"train":top5.avg,"val":val_top5.avg},epoch)
+    w.close()
     return precisions
-    # writer.close()
+
 if __name__ == "__main__":
     train(20)
